@@ -49,7 +49,7 @@ class CraftingGameApp(App):
             Window.size = (420, 800)
         Window.clearcolor = (0.06, 0.06, 0.07, 1)
 
-        self.title = "Infinite Craft"
+        self.title = "Infinite alchemy"
         root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
 
         # storage path
@@ -58,7 +58,7 @@ class CraftingGameApp(App):
         self.GAME_FILE = str(user_dir / "game_data.json")
         self.load_game()
 
-        title = Label(text="Infinite Craft", font_size=sp(24), bold=True,
+        title = Label(text="Infinite alchemy", font_size=sp(24), bold=True,
                       color=TEXT, size_hint_y=None, height=dp(34))
         root.add_widget(title)
 
@@ -69,8 +69,10 @@ class CraftingGameApp(App):
 
         chip_row = BoxLayout(orientation="horizontal", spacing=dp(8),
                              size_hint_y=None, height=dp(40))
-        self.selected_label1 = self._pill("Select first element")
-        self.selected_label2 = self._pill("Select second element")
+        self.selected_label1 = self._pill("[color=#969696] Select first element")
+        self.selected_label2 = self._pill("[color=#969696] Select second element")
+        self.selected_label1.markup = True
+        self.selected_label2.markup = True
         chip_row.add_widget(self.selected_label1)
         chip_row.add_widget(self.selected_label2)
         root.add_widget(chip_row)
@@ -93,7 +95,7 @@ class CraftingGameApp(App):
         root.add_widget(actions)
 
         self.result_label = Label(text="", font_size=sp(15), color=TEXT,
-                                  size_hint_y=None, height=dp(40))
+                                  size_hint_y=None, height=dp(40), halign='center')
         root.add_widget(self.result_label)
 
         self.update_inventory_display()
@@ -156,20 +158,22 @@ class CraftingGameApp(App):
 
     # ---- Selection / Status
     def select_element(self, element, button):
-        if len(self.selected_elements) < 2 and element not in self.selected_elements:
+        if len(self.selected_elements) < 2:
             self.selected_elements.append(element)
             button.background_color = HIGHLIGHT
+            self.selected_label1.markup = True
+            self.selected_label2.markup = True
             if len(self.selected_elements) == 1:
-                self.selected_label1.text = self._pretty(element)
+                self.selected_label1.text = f"[color=#969696] [b]{self._pretty(element)}[/b]"
             elif len(self.selected_elements) == 2:
-                self.selected_label2.text = self._pretty(element)
+                self.selected_label2.text = f"[color=#969696] [b]{self._pretty(element)}[/b]"
                 self.combine_button.disabled = False
         self.update_status()
 
     def clear_selection(self, _btn):
         self.selected_elements.clear()
-        self.selected_label1.text = "Select first element"
-        self.selected_label2.text = "Select second element"
+        self.selected_label1.text = "[color=#969696]Select first element"
+        self.selected_label2.text = "[color=#969696]Select second element"
         self.combine_button.disabled = True
         self.result_label.text = ""
         self.result_label.markup = False
@@ -199,7 +203,13 @@ class CraftingGameApp(App):
         # Check if we already know this recipe
         if (a_lower, b_lower) in self.recipes:
             result = self.recipes[(a_lower, b_lower)]
-            self.combination_done(a, b, result, None, 0)
+            self.combination_done(a, b, result, None, True, 0)
+            return
+
+        # Check if we already know this recipe 2x
+        if (b_lower, a_lower) in self.recipes:
+            result = self.recipes[(b_lower, a_lower)]
+            self.combination_done(a, b, result, None, True, 0)
             return
             
         self.result_label.text = "Combining…"
@@ -224,12 +234,13 @@ class CraftingGameApp(App):
                     import time; time.sleep(1.2)
         except Exception as e:
             error = f"Request error: {e}"
-        Clock.schedule_once(partial(self.combination_done, a, b, result, error), 0)
+        Clock.schedule_once(partial(self.combination_done, a, b, result, error, False), 0)
 
-    def combination_done(self, a, b, result, error, _dt):
+    def combination_done(self, a, b, result, error, known, _dt):
         if result:
             pretty = self._pretty(result)
-            new = result.lower() not in self.inventory
+            discovery = result.lower() not in self.inventory #if you just discovered this
+            new = result.lower() in self.inventory and not known #if recipe is new but item is not
             self.inventory.add(result.lower())
             
             # Save the new recipe
@@ -238,7 +249,12 @@ class CraftingGameApp(App):
             self.save_game()
             self.update_inventory_display()
             self.result_label.markup = True
-            self.result_label.text = f"{'New' if new else 'Known'}: {self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
+            if discovery:
+                self.result_label.text = f"[color=#FFD700]New Discovery\n [b]{pretty}[/b]"
+            elif new:
+                self.result_label.text = f"[color=#6632a8]New Recipe\n {self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
+            else:
+                self.result_label.text = f"[color=#802c11]Already known\n {self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
         else:
             self.result_label.markup = False
             self.result_label.text = f"Combination failed: {error or 'Unknown error'}"
@@ -279,7 +295,7 @@ class CraftingGameApp(App):
             ("clay", "fire"): "brick",
             ("plant", "water"): "algae",
             ("algae", "air"): "life",
-            ("life", "earth"): "bacteria",
+            ("life", "air"): "bacteria",
             ("bacteria", "air"): "virus",
             ("life", "water"): "fish",
             ("life", "earth"): "worm",
@@ -288,7 +304,7 @@ class CraftingGameApp(App):
             ("bird", "earth"): "chicken",
             ("chicken", "time"): "dinosaur",
             ("dinosaur", "meteor"): "extinction",
-            ("life", "fire"): "human",
+            ("life", "clay"): "human",
             ("human", "air"): "idea",
             ("human", "earth"): "home",
             ("human", "water"): "sweat",
