@@ -18,7 +18,7 @@ import httpx
 class CraftingGameApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.api_url = "https://your-replit-url.repl.co/combine"  # ← update this
+        self.api_url = "https://infinite-craft-api.onrender.com/combine"  # ← update this
         self.GAME_FILE = None
         self.recipes = {}
         self.inventory = set()
