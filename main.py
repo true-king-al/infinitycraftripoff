@@ -121,15 +121,34 @@ class CraftingGameApp(App):
         threading.Thread(target=self.combine_api_call, args=(a, b), daemon=True).start()
 
     def combine_api_call(self, a, b):
+        result = None
+        error = None
         try:
-            response = httpx.post(self.api_url, json={"a": a, "b": b}, timeout=30)
-            result = response.json().get("result")
-        except Exception as e:
-            result = None
-            print(f"API error: {e}")
-        Clock.schedule_once(partial(self.combination_done, a, b, result))
+            # Render free plans sometimes cold-start; give it a generous timeout + one retry
+            for attempt in range(2):
+                resp = httpx.post(self.api_url, json={"a": a, "b": b}, timeout=60)
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {}
 
-    def combination_done(self, a, b, result, _dt):
+                if resp.status_code == 200 and "result" in data and data["result"]:
+                    result = data["result"]
+                    break
+
+                # capture server-reported error if present
+                error = data.get("error") or f"HTTP {resp.status_code}: {resp.text}"
+                if attempt == 0:
+                    # brief backoff then try once more (helps with cold starts)
+                    import time; time.sleep(1.5)
+                else:
+                    break
+        except Exception as e:
+            error = f"Request error: {e}"
+
+        Clock.schedule_once(partial(self.combination_done, a, b, result, error), 0)
+
+    def combination_done(self, a, b, result, error, _dt):
         if result:
             if result.lower() not in self.inventory:
                 self.result_label.text = f'New Discovery: {a} + {b} = {result}'
@@ -139,7 +158,8 @@ class CraftingGameApp(App):
             self.save_game()
             self.update_inventory_display()
         else:
-            self.result_label.text = "Combination failed."
+            # show why it failed so we can actually debug
+            self.result_label.text = f"Combination failed: {error or 'Unknown error'}"
 
         Clock.schedule_once(lambda dt: self.clear_selection(None), 2.5)
 
