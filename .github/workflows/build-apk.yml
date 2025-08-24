@@ -1,0 +1,41 @@
+name: Build APK (no container)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk zip unzip \
+            build-essential zlib1g-dev libssl-dev libffi-dev \
+            autoconf automake libtool libtool-bin pkg-config m4 gettext autopoint texinfo gperf \
+            cmake ninja-build python3-pip
+
+      - name: Install buildozer & p4a
+        run: |
+          pip install --user --upgrade buildozer python-for-android cython
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build debug APK
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Xmx3g
+        run: |
+          rm -rf .buildozer
+          buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: infinitycraft-apk
+          path: bin/*.apk
