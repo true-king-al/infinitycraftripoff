@@ -192,7 +192,16 @@ class CraftingGameApp(App):
         if HTTPX_IMPORT_ERR:
             self.result_label.text = f"Combination failed: {HTTPX_IMPORT_ERR}"
             return
+            
         a, b = self.selected_elements
+        a_lower, b_lower = a.lower(), b.lower()
+        
+        # Check if we already know this recipe
+        if (a_lower, b_lower) in self.recipes:
+            result = self.recipes[(a_lower, b_lower)]
+            self.combination_done(a, b, result, None, 0)
+            return
+            
         self.result_label.text = "Combining…"
         self.combine_button.disabled = True
         threading.Thread(target=self.combine_api_call, args=(a, b), daemon=True).start()
@@ -222,6 +231,10 @@ class CraftingGameApp(App):
             pretty = self._pretty(result)
             new = result.lower() not in self.inventory
             self.inventory.add(result.lower())
+            
+            # Save the new recipe
+            self.recipes[(a.lower(), b.lower())] = result.lower()
+            
             self.save_game()
             self.update_inventory_display()
             self.result_label.markup = True
@@ -233,23 +246,30 @@ class CraftingGameApp(App):
 
     # ---- Persistence
     def save_game(self):
-        data = {"recipes": {}, "inventory": sorted(list(self.inventory))}
+        # Convert tuple keys to string format for JSON compatibility
+        recipes_dict = {}
+        for (a, b), result in self.recipes.items():
+            recipes_dict[f"{a}+{b}"] = result
+        
+        data = {
+            "recipes": recipes_dict, 
+            "inventory": sorted(list(self.inventory))
+        }
         with open(self.GAME_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
-
     def load_game(self):
-        # Load default starting inventory
+        # Load default starting inventory and recipes
         self.inventory = {"fire", "water", "air", "earth"}
-
-        # Add 30 prebuilt recipes manually
+        
+        # Default recipes
         self.recipes = {
             ("fire", "water"): "steam",
             ("earth", "water"): "mud",
             ("earth", "plant"): "tree",
             ("fire", "air"): "smoke",
             ("air", "water"): "rain",
-            ("air", "earth"): "dust",
+            ("air", "earth": "dust",
             ("fire", "earth"): "lava",
             ("mud", "earth"): "soil",
             ("soil", "water"): "plant",
@@ -282,13 +302,19 @@ class CraftingGameApp(App):
             if self.GAME_FILE and os.path.exists(self.GAME_FILE):
                 with open(self.GAME_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                
+                # Load inventory
                 inv = data.get("inventory")
                 if inv:
                     self.inventory = set(inv)
-        except Exception:
-            pass
-
-
+                
+                # Load recipes
+                recipes_data = data.get("recipes", {})
+                for key, result in recipes_data.items():
+                    a, b = key.split('+')
+                    self.recipes[(a, b)] = result
+        except Exception as e:
+            print(f"Error loading game: {e}")
 
 if __name__ == "__main__":
     CraftingGameApp().run()
