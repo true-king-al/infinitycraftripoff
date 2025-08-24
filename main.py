@@ -1,9 +1,11 @@
+# main.py  — pretty edition ✨
 import os
 import json
 import threading
 from functools import partial
 from pathlib import Path
 
+import httpx
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -13,66 +15,175 @@ from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.utils import platform
-import httpx
+from kivy.animation import Animation
+
+# ----------------- simple theme -----------------
+THEME = {
+    "bg":          (0.07, 0.08, 0.10, 1),
+    "panel":       (0.12, 0.13, 0.16, 1),
+    "text":        (0.96, 0.97, 0.99, 1),
+    "muted":       (0.80, 0.82, 0.86, 1),
+    "accent":      (0.22, 0.60, 0.95, 1),  # combine button
+    "accent_dim":  (0.16, 0.40, 0.68, 1),
+    "danger":      (0.85, 0.26, 0.26, 1),
+    "warn":        (0.95, 0.74, 0.24, 1),
+    "success":     (0.20, 0.80, 0.45, 1),
+    "chip":        (0.18, 0.20, 0.25, 1),
+    "chip_sel":    (0.70, 0.72, 0.28, 1),
+}
+
+def label_center(label, size):
+    label.text_size = size
+
+def flat_button(text, bg, fg=None, height=56, bold=False):
+    btn = Button(
+        text=text,
+        size_hint_y=None, height=height,
+        background_normal="",  # solid color
+        background_down="",
+        background_color=bg,
+        color=fg or THEME["text"],
+        font_size="18sp",
+        bold=bold,
+    )
+    return btn
+
 
 class CraftingGameApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.api_url = "https://infinite-craft-api.onrender.com/combine"  # ← update this
+        # point to your Render API
+        self.api_url = "https://infinite-craft-api.onrender.com/combine"
+
         self.GAME_FILE = None
         self.recipes = {}
         self.inventory = set()
         self.selected_elements = []
         self.element_buttons = {}
 
+    # ---------- layout ----------
+
     def build(self):
+        # desktop sizing; Android ignores
         if platform not in ("android", "ios"):
-            Window.size = (800, 600)
+            Window.size = (420, 820)
+        Window.clearcolor = THEME["bg"]
 
         self.title = "Infinite Craft Game"
+
+        # save file dir
         user_dir = Path(self.user_data_dir)
         user_dir.mkdir(parents=True, exist_ok=True)
         self.GAME_FILE = str(user_dir / "game_data.json")
         self.load_game()
 
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        self.status_label = Label(text='Select 2 elements to combine', size_hint_y=None, height=30)
-        layout.add_widget(self.status_label)
+        root = BoxLayout(orientation="vertical", padding=12, spacing=10)
 
-        self.selected_label1 = Label(text='Select first element', size_hint_y=None, height=30)
-        self.selected_label2 = Label(text='Select second element', size_hint_y=None, height=30)
-        layout.add_widget(self.selected_label1)
-        layout.add_widget(self.selected_label2)
+        # Title + status
+        title = Label(
+            text="[b]Infinite Craft[/b]",
+            markup=True,
+            size_hint_y=None, height=40,
+            color=THEME["text"],
+            font_size="22sp", halign="center", valign="middle",
+        )
+        title.bind(size=label_center)
+        root.add_widget(title)
 
-        self.combine_button = Button(text='Combine Elements', size_hint_y=None, height=50, disabled=True)
+        self.status_label = Label(
+            text="Select 2 elements to combine",
+            size_hint_y=None, height=28,
+            color=THEME["muted"],
+            font_size="14sp", halign="center", valign="middle",
+        )
+        self.status_label.bind(size=label_center)
+        root.add_widget(self.status_label)
+
+        # Selected chips
+        chip_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=42, spacing=8)
+        self.selected_label1 = Label(text="Select first element",
+                                     size_hint_y=None, height=42,
+                                     color=THEME["text"], font_size="16sp",
+                                     halign="center", valign="middle")
+        self.selected_label2 = Label(text="Select second element",
+                                     size_hint_y=None, height=42,
+                                     color=THEME["text"], font_size="16sp",
+                                     halign="center", valign="middle")
+        for lab in (self.selected_label1, self.selected_label2):
+            lab.bind(size=label_center)
+            chip_row.add_widget(lab)
+        root.add_widget(chip_row)
+
+        # Action buttons row
+        btn_row = BoxLayout(size_hint_y=None, height=56, spacing=8)
+        self.combine_button = flat_button("Combine Elements", THEME["accent"], height=56, bold=True)
+        self.combine_button.disabled = True
+        self.combine_button.background_color = THEME["accent_dim"]  # show disabled tint
         self.combine_button.bind(on_press=self.combine_elements)
-        layout.add_widget(self.combine_button)
 
-        clear_button = Button(text='Clear Selection', size_hint_y=None, height=40)
-        clear_button.bind(on_press=self.clear_selection)
-        layout.add_widget(clear_button)
+        clear_btn = flat_button("Clear Selection", THEME["panel"], height=56)
+        clear_btn.bind(on_press=self.clear_selection)
 
-        inventory_label = Label(text='Inventory (Tap to select):', size_hint_y=None, height=30)
-        layout.add_widget(inventory_label)
+        btn_row.add_widget(self.combine_button)
+        btn_row.add_widget(clear_btn)
+        root.add_widget(btn_row)
 
-        scroll = ScrollView()
-        self.inventory_grid = GridLayout(cols=4, spacing=5, size_hint_y=None)
-        self.inventory_grid.bind(minimum_height=self.inventory_grid.setter('height'))
-        scroll.add_widget(self.inventory_grid)
-        layout.add_widget(scroll)
+        # Inventory header
+        inv_header = Label(
+            text="Inventory (tap to select):",
+            size_hint_y=None, height=28,
+            color=THEME["muted"],
+            font_size="14sp", halign="left", valign="middle"
+        )
+        inv_header.bind(size=label_center)
+        root.add_widget(inv_header)
 
-        self.result_label = Label(text='', size_hint_y=None, height=60)
-        layout.add_widget(self.result_label)
+        # Scrollable inventory grid
+        self.scroll = ScrollView()
+        self.inventory_grid = GridLayout(
+            cols=self._inventory_cols(),
+            spacing=8, padding=(0, 0, 0, 8),
+            size_hint_y=None
+        )
+        self.inventory_grid.bind(minimum_height=self.inventory_grid.setter("height"))
+        self.scroll.add_widget(self.inventory_grid)
+        root.add_widget(self.scroll)
+
+        # Bottom toast/result bar
+        self.result_label = Label(
+            text="",
+            size_hint_y=None, height=56,
+            color=THEME["text"],
+            font_size="16sp", halign="center", valign="middle",
+        )
+        self.result_label.bind(size=label_center)
+        root.add_widget(self.result_label)
+
+        # react to width changes (rotate / different screens)
+        Window.bind(on_resize=lambda *_: self._reflow_inventory())
 
         self.update_inventory_display()
-        return layout
+        return root
+
+    def _inventory_cols(self):
+        # small phones -> 3 columns; bigger -> 4
+        return 3 if Window.width < 380 else 4
+
+    def _reflow_inventory(self):
+        new_cols = self._inventory_cols()
+        if self.inventory_grid.cols != new_cols:
+            self.inventory_grid.cols = new_cols
+            self.update_inventory_display()
+
+    # ---------- inventory / selection ----------
 
     def update_inventory_display(self):
         self.inventory_grid.clear_widgets()
         self.element_buttons.clear()
 
         for element in sorted(self.inventory):
-            btn = Button(text=element.title(), size_hint_y=None, height=60)
+            btn = flat_button(element.title(), THEME["chip"], height=52)
+            btn.font_size = "17sp"
             btn.bind(on_press=partial(self.select_element, element))
             self.element_buttons[element] = btn
             self.inventory_grid.add_widget(btn)
@@ -82,49 +193,56 @@ class CraftingGameApp(App):
     def select_element(self, element, button):
         if len(self.selected_elements) < 2 and element not in self.selected_elements:
             self.selected_elements.append(element)
-            button.background_color = (0.8, 0.8, 0.2, 1)
+            # highlight the chosen button
+            button.background_color = THEME["chip_sel"]
+            button.color = THEME["bg"]
 
             if len(self.selected_elements) == 1:
                 self.selected_label1.text = element.title()
             elif len(self.selected_elements) == 2:
                 self.selected_label2.text = element.title()
                 self.combine_button.disabled = False
+                self.combine_button.background_color = THEME["accent"]
 
         self.update_status()
 
     def clear_selection(self, _btn):
         self.selected_elements.clear()
-        self.selected_label1.text = 'Select first element'
-        self.selected_label2.text = 'Select second element'
+        self.selected_label1.text = "Select first element"
+        self.selected_label2.text = "Select second element"
         self.combine_button.disabled = True
-        self.result_label.text = ''
+        self.combine_button.background_color = THEME["accent_dim"]
+        self.result_label.text = ""
 
         for btn in self.element_buttons.values():
-            btn.background_color = (1, 1, 1, 1)
+            btn.background_color = THEME["chip"]
+            btn.color = THEME["text"]
 
         self.update_status()
 
     def update_status(self):
-        status = f'Inventory: {len(self.inventory)} elements | '
+        status = f"Inventory: {len(self.inventory)} elements | "
         if len(self.selected_elements) == 0:
-            status += 'Select 2 elements'
+            status += "Select 2 elements"
         elif len(self.selected_elements) == 1:
-            status += f'Selected: {self.selected_elements[0]}'
+            status += f"Selected: {self.selected_elements[0].title()}"
         else:
-            status += f'Selected: {self.selected_elements[0]} + {self.selected_elements[1]}'
+            status += f"Selected: {self.selected_elements[0].title()} + {self.selected_elements[1].title()}"
         self.status_label.text = status
+
+    # ---------- combine flow ----------
 
     def combine_elements(self, _btn):
         a, b = self.selected_elements
-        self.result_label.text = 'Combining...'
+        self.toast("Combining...", color=THEME["muted"])
         self.combine_button.disabled = True
+        self.combine_button.background_color = THEME["accent_dim"]
         threading.Thread(target=self.combine_api_call, args=(a, b), daemon=True).start()
 
     def combine_api_call(self, a, b):
-        result = None
-        error = None
+        result, error = None, None
         try:
-            # Render free plans sometimes cold-start; give it a generous timeout + one retry
+            # generous timeout + one retry (Render free cold-starts)
             for attempt in range(2):
                 resp = httpx.post(self.api_url, json={"a": a, "b": b}, timeout=60)
                 try:
@@ -132,15 +250,14 @@ class CraftingGameApp(App):
                 except Exception:
                     data = {}
 
-                if resp.status_code == 200 and "result" in data and data["result"]:
+                if resp.status_code == 200 and data.get("result"):
                     result = data["result"]
                     break
 
-                # capture server-reported error if present
                 error = data.get("error") or f"HTTP {resp.status_code}: {resp.text}"
                 if attempt == 0:
-                    # brief backoff then try once more (helps with cold starts)
-                    import time; time.sleep(1.5)
+                    import time
+                    time.sleep(1.2)
                 else:
                     break
         except Exception as e:
@@ -150,24 +267,27 @@ class CraftingGameApp(App):
 
     def combination_done(self, a, b, result, error, _dt):
         if result:
-            if result.lower() not in self.inventory:
-                self.result_label.text = f'New Discovery: {a} + {b} = {result}'
-            else:
-                self.result_label.text = f'Already known: {result}'
-            self.inventory.add(result.lower())
+            lower = result.lower()
+            new = lower not in self.inventory
+            self.inventory.add(lower)
             self.save_game()
             self.update_inventory_display()
-        else:
-            # show why it failed so we can actually debug
-            self.result_label.text = f"Combination failed: {error or 'Unknown error'}"
 
-        Clock.schedule_once(lambda dt: self.clear_selection(None), 2.5)
+            if new:
+                self.toast(f"New discovery: {a.title()} + {b.title()} → {result}",
+                           color=THEME["success"])
+            else:
+                self.toast(f"Already known: {result}", color=THEME["warn"])
+        else:
+            self.toast(f"Combination failed: {error or 'Unknown error'}",
+                       color=THEME["danger"])
+
+        Clock.schedule_once(lambda dt: self.clear_selection(None), 2.2)
+
+    # ---------- persistence ----------
 
     def save_game(self):
-        data = {
-            "recipes": {},
-            "inventory": sorted(list(self.inventory))
-        }
+        data = {"recipes": {}, "inventory": sorted(list(self.inventory))}
         with open(self.GAME_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
@@ -180,8 +300,17 @@ class CraftingGameApp(App):
                 inv = data.get("inventory")
                 if inv:
                     self.inventory = set(inv)
-        except:
+        except Exception:
             pass
 
-if __name__ == '__main__':
+    # ---------- tiny toast helper ----------
+
+    def toast(self, text, color=None):
+        self.result_label.text = text
+        self.result_label.color = color or THEME["text"]
+        self.result_label.opacity = 0
+        Animation(opacity=1, d=0.18).start(self.result_label)
+
+
+if __name__ == "__main__":
     CraftingGameApp().run()
