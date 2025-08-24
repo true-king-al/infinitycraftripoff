@@ -13,32 +13,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install Java and native toolchain for python-for-android
+      # Use Java 17 BEFORE touching sdkmanager
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Install Android SDK/NDK and auto-accept licenses (correct inputs)
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
+          packages: |
+            platforms;android-34
+            build-tools;35.0.0
+            platform-tools
+            ndk;25.1.8937393
+            tools
+
+      # Native toolchain for python-for-android/autotools
       - name: System deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            openjdk-17-jdk zip unzip \
             build-essential zlib1g-dev libssl-dev libffi-dev \
             autoconf automake libtool libtool-bin pkg-config m4 gettext autopoint texinfo gperf \
-            cmake ninja-build python3-pip
+            cmake ninja-build python3-pip zip unzip
 
-      # Set up Android SDK/NDK & accept licenses
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          build-tools: 35.0.0
-          ndk: 25.1.8937393
-          cache: true
-
-      # Make sure buildozer & p4a are available
-      - name: Install buildozer
+      - name: Install buildozer & p4a
         run: |
           pip install --user --upgrade buildozer python-for-android cython
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # Point buildozer/p4a at the preinstalled SDK/NDK, then build
+      # Point Buildozer at the preinstalled SDK/NDK and build
       - name: Build debug APK
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
