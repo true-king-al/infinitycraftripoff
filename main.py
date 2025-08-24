@@ -237,8 +237,47 @@ class CraftingGameApp(App):
         with open(self.GAME_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
+
     def load_game(self):
+        # Load default starting inventory
         self.inventory = {"fire", "water", "air", "earth"}
+
+        # Add 30 prebuilt recipes manually
+        self.recipes = {
+            ("fire", "water"): "steam",
+            ("earth", "water"): "mud",
+            ("earth", "plant"): "tree",
+            ("fire", "air"): "smoke",
+            ("air", "water"): "rain",
+            ("air", "earth"): "dust",
+            ("fire", "earth"): "lava",
+            ("mud", "earth"): "soil",
+            ("soil", "water"): "plant",
+            ("lava", "water"): "stone",
+            ("stone", "air"): "sand",
+            ("sand", "water"): "clay",
+            ("clay", "fire"): "brick",
+            ("plant", "water"): "algae",
+            ("algae", "air"): "life",
+            ("life", "earth"): "bacteria",
+            ("bacteria", "air"): "virus",
+            ("life", "water"): "fish",
+            ("life", "earth"): "worm",
+            ("worm", "earth"): "insect",
+            ("fish", "air"): "bird",
+            ("bird", "earth"): "chicken",
+            ("chicken", "time"): "dinosaur",
+            ("dinosaur", "meteor"): "extinction",
+            ("life", "fire"): "human",
+            ("human", "air"): "idea",
+            ("human", "earth"): "home",
+            ("human", "water"): "sweat",
+            ("human", "tool"): "builder",
+            ("builder", "stone"): "house",
+            ("house", "fire"): "chimney",
+            ("fire", "tree"): "campfire"
+        }
+
         try:
             if self.GAME_FILE and os.path.exists(self.GAME_FILE):
                 with open(self.GAME_FILE, "r", encoding="utf-8") as f:
@@ -248,6 +287,7 @@ class CraftingGameApp(App):
                     self.inventory = set(inv)
         except Exception:
             pass
+
 
 
 if __name__ == "__main__":
