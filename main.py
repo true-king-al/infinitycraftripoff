@@ -4,6 +4,7 @@ from functools import partial
 from pathlib import Path
 
 # --- safe httpx import so missing deps won't crash on launch
+
 HTTPX_IMPORT_ERR = None
 try:
     import httpx
@@ -30,7 +31,9 @@ SURFACE_LIGHT = (0.20, 0.20, 0.20, 1)
 TEXT = (1, 1, 1, 1)
 TEXT_DIM = (0.85, 0.85, 0.85, 1)
 HIGHLIGHT = (0.84, 0.73, 0.22, 1)
+FAVORITE_COLOR = (0.94, 0.33, 0.31, 1)  # Red for favorite star
 
+FONT_PATH = "fonts/DejaVuSans.ttf"
 
 class CraftingGameApp(App):
     def __init__(self, **kwargs):
@@ -40,6 +43,7 @@ class CraftingGameApp(App):
         self.GAME_FILE = None
         self.recipes = {}
         self.inventory = set()
+        self.favorites = set()  # New: track favorite elements
         self.selected_elements = []
         self.element_buttons = {}
         self.min_chip_width_dp = 120
@@ -64,7 +68,7 @@ class CraftingGameApp(App):
 
         self.status_label = Label(text='Select 2 elements to combine',
                                   font_size=sp(14), color=TEXT_DIM,
-                                  size_hint_y=None, height=dp(22))
+                                  size_hint_y=None, height=dp(22), font_name=FONT_PATH)
         root.add_widget(self.status_label)
 
         chip_row = BoxLayout(orientation="horizontal", spacing=dp(8),
@@ -126,12 +130,30 @@ class CraftingGameApp(App):
         return btn
 
     def _chip(self, element):
+        # Create a container for the element button and favorite star
+        container = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(52))
+        
+        # Main element button (takes most of the space)
         btn = Button(text=self._pretty(element), background_normal="", background_down="",
                      background_color=SURFACE_LIGHT, color=TEXT, font_size=sp(16),
-                     size_hint_y=None, height=dp(52), halign='center', valign='middle')
+                     size_hint_x=0.8, halign='center', valign='middle')
         btn.bind(size=lambda b, _: self._wrap_text(b))
         btn.bind(on_press=partial(self.select_element, element))
-        return btn
+        
+        # Favorite star button
+        is_favorite = element.lower() in self.favorites
+        star_text = "★" if is_favorite else "☆"
+        star_color = FAVORITE_COLOR if is_favorite else TEXT_DIM
+        
+        star_btn = Button(text=star_text, background_normal="", background_down="",
+                         background_color=(0, 0, 0, 0), color=star_color, font_size=sp(20),
+                         size_hint_x=0.2, halign='center', valign='middle', font_name=FONT_PATH)
+        star_btn.bind(on_press=partial(self.toggle_favorite, element))
+        
+        container.add_widget(btn)
+        container.add_widget(star_btn)
+        
+        return container, btn  # Return both for reference
 
     def _wrap_text(self, widget):
         widget.text_size = (widget.width - dp(16), None)
@@ -145,15 +167,44 @@ class CraftingGameApp(App):
         cols = max(2, int(Window.width / dp(self.min_chip_width_dp)))
         self.inventory_grid.cols = cols
 
+    # ---- Favorites system
+    def toggle_favorite(self, element, star_button):
+        """Toggle favorite status of an element"""
+        element_lower = element.lower()
+        if element_lower in self.favorites:
+            self.favorites.remove(element_lower)
+            star_button.text = "☆"
+            star_button.color = TEXT_DIM
+        else:
+            self.favorites.add(element_lower)
+            star_button.text = "★"
+            star_button.color = FAVORITE_COLOR
+        
+        self.save_game()
+        self.update_inventory_display()  # Refresh to reorder
+
+    def get_sorted_inventory(self):
+        """Return inventory sorted with favorites first, then alphabetically"""
+        favorites_list = [elem for elem in self.inventory if elem in self.favorites]
+        non_favorites_list = [elem for elem in self.inventory if elem not in self.favorites]
+        
+        # Sort each group alphabetically
+        favorites_list.sort()
+        non_favorites_list.sort()
+        
+        return favorites_list + non_favorites_list
+
     # ---- Inventory UI
     def update_inventory_display(self):
         self._reflow_columns()
         self.inventory_grid.clear_widgets()
         self.element_buttons.clear()
-        for element in sorted(self.inventory):
-            btn = self._chip(element)
+        
+        # Use sorted inventory with favorites first
+        for element in self.get_sorted_inventory():
+            container, btn = self._chip(element)
             self.element_buttons[element] = btn
-            self.inventory_grid.add_widget(btn)
+            self.inventory_grid.add_widget(container)
         self.update_status()
 
     # ---- Selection / Status
@@ -189,7 +240,10 @@ class CraftingGameApp(App):
         else:
             a, b = self.selected_elements
             suffix = f"Selected: {self._pretty(a)} + {self._pretty(b)}"
-        self.status_label.text = f"Inventory: {len(self.inventory)} elements | {suffix}"
+        
+        favorites_count = len(self.favorites)
+        fav_text = f" | ★ {favorites_count}" if favorites_count > 0 else ""
+        self.status_label.text = f"Inventory: {len(self.inventory)} elements{fav_text}"
 
     # ---- Combine flow
     def combine_elements(self, _btn):
@@ -269,7 +323,8 @@ class CraftingGameApp(App):
         
         data = {
             "recipes": recipes_dict, 
-            "inventory": sorted(list(self.inventory))
+            "inventory": sorted(list(self.inventory)),
+            "favorites": sorted(list(self.favorites))  # Save favorites
         }
         with open(self.GAME_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
@@ -277,6 +332,7 @@ class CraftingGameApp(App):
     def load_game(self):
         # Load default starting inventory and recipes
         self.inventory = {"fire", "water", "air", "earth"}
+        self.favorites = set()  # Initialize empty favorites
         
         # Default recipes
         self.recipes = {
@@ -323,6 +379,11 @@ class CraftingGameApp(App):
                 inv = data.get("inventory")
                 if inv:
                     self.inventory = set(inv)
+                
+                # Load favorites
+                fav = data.get("favorites")
+                if fav:
+                    self.favorites = set(fav)
                 
                 # Load recipes
                 recipes_data = data.get("recipes", {})
