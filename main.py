@@ -269,7 +269,7 @@ class CraftingGameApp(App):
             ("earth", "plant"): "tree",
             ("fire", "air"): "smoke",
             ("air", "water"): "rain",
-            ("air", "earth": "dust",
+            ("air", "earth"): "dust",
             ("fire", "earth"): "lava",
             ("mud", "earth"): "soil",
             ("soil", "water"): "plant",
