@@ -1,4 +1,4 @@
-name: Build APK (no container)
+name: Build APK (runner, pinned tools)
 
 on:
   workflow_dispatch:
@@ -13,7 +13,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system deps
+      # Install Java and native toolchain for python-for-android
+      - name: System deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -22,13 +23,29 @@ jobs:
             autoconf automake libtool libtool-bin pkg-config m4 gettext autopoint texinfo gperf \
             cmake ninja-build python3-pip
 
-      - name: Install buildozer & p4a
+      # Set up Android SDK/NDK & accept licenses
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 35.0.0
+          ndk: 25.1.8937393
+          cache: true
+
+      # Make sure buildozer & p4a are available
+      - name: Install buildozer
         run: |
           pip install --user --upgrade buildozer python-for-android cython
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      # Point buildozer/p4a at the preinstalled SDK/NDK, then build
       - name: Build debug APK
         env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.1.8937393
+          ANDROIDNDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.1.8937393
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Xmx3g
         run: |
           rm -rf .buildozer
