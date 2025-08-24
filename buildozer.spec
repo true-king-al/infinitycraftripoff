@@ -6,7 +6,7 @@ source.dir = .
 main = infinitecraft.py
 version = 0.2
 
-requirements = python3,kivy==2.3.0,openssl,libffi,openai==1.51.0,httpx, httpcore, certifi,urllib3,idna,charset-normalizer
+requirements = python3,kivy==2.3.0,openssl,libffi,openai==1.51.0,httpx, httpcore, h11, certifi,urllib3,idna,charset-normalizer
 android.permissions = INTERNET
 
 # Pin stable, not RC junk
