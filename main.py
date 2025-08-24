@@ -131,12 +131,12 @@ class CraftingGameApp(App):
 
     def _chip(self, element):
         # Create a container for the element button and favorite star
-        container = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(52))
+        container = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(52))
         
         # Main element button (takes most of the space)
         btn = Button(text=self._pretty(element), background_normal="", background_down="",
                      background_color=SURFACE_LIGHT, color=TEXT, font_size=sp(16),
-                     size_hint_x=0.8, halign='center', valign='middle')
+                     size_hint_y=0.75, halign='center', valign='middle')
         btn.bind(size=lambda b, _: self._wrap_text(b))
         btn.bind(on_press=partial(self.select_element, element))
         
@@ -147,7 +147,7 @@ class CraftingGameApp(App):
         
         star_btn = Button(text=star_text, background_normal="", background_down="",
                          background_color=(0, 0, 0, 0), color=star_color, font_size=sp(20),
-                         size_hint_x=0.2, halign='center', valign='middle', font_name=FONT_PATH)
+                         size_hint_y=0.25, halign='center', valign='middle', font_name=FONT_PATH)
         star_btn.bind(on_press=partial(self.toggle_favorite, element))
         
         container.add_widget(btn)
