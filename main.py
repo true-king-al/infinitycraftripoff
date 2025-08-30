@@ -18,6 +18,7 @@ from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.button import Button
@@ -35,6 +36,78 @@ FAVORITE_COLOR = (0.94, 0.33, 0.31, 1)  # Red for favorite star
 
 FONT_PATH = "fonts/DejaVuSans.ttf"
 
+class FlexGridLayout(FloatLayout):
+    """Custom layout that arranges items in a flexible grid with proper spacing"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.padding = dp(8)
+        self.spacing = dp(8)
+        self.min_item_width = dp(80)  # Smaller default width
+        self.bind(size=self.do_layout, pos=self.do_layout)
+        
+    def add_widget(self, widget, *args, **kwargs):
+        super().add_widget(widget, *args, **kwargs)
+        Clock.schedule_once(lambda dt: self.do_layout(), 0.1)
+        
+    def remove_widget(self, widget, *args, **kwargs):
+        super().remove_widget(widget, *args, **kwargs)
+        Clock.schedule_once(lambda dt: self.do_layout(), 0.1)
+        
+    def clear_widgets(self, *args, **kwargs):
+        super().clear_widgets(*args, **kwargs)
+        self.height = dp(50)  # Reset height when cleared
+        
+    def do_layout(self, *args):
+        if not self.children:
+            self.height = dp(50)
+            return
+            
+        # Calculate available width
+        available_width = self.width - (2 * self.padding)
+        if available_width <= 0:
+            return
+            
+        # Calculate columns based on minimum item width
+        cols = max(1, int(available_width / self.min_item_width))
+        col_width = available_width / cols
+        
+        # Position items
+        row = 0
+        col = 0
+        max_row_height = dp(50)  # Smaller default height
+        current_row_height = dp(50)
+        y_offset = 0
+        
+        # Sort children by their order (reverse because Kivy adds children in reverse)
+        sorted_children = list(reversed(self.children))
+        
+        for child in sorted_children:
+            # Position the child
+            x = self.x + self.padding + (col * col_width)
+            y = self.top - self.padding - y_offset - child.height
+            
+            child.pos = (x, y)
+            child.width = col_width - self.spacing
+            
+            # Track the tallest item in current row
+            current_row_height = max(current_row_height, child.height)
+            
+            # Move to next column
+            col += 1
+            
+            # If we've filled the row, move to next row
+            if col >= cols:
+                col = 0
+                row += 1
+                y_offset += current_row_height + self.spacing
+                max_row_height = max(max_row_height, current_row_height)
+                current_row_height = dp(50)
+        
+        # Set the total height of the layout
+        total_height = y_offset + current_row_height + (2 * self.padding)
+        self.height = max(dp(50), total_height)
+
 class CraftingGameApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -43,10 +116,10 @@ class CraftingGameApp(App):
         self.GAME_FILE = None
         self.recipes = {}
         self.inventory = set()
-        self.favorites = set()  # New: track favorite elements
+        self.favorites = set()
         self.selected_elements = []
         self.element_buttons = {}
-        self.min_chip_width_dp = 120
+        self.min_chip_width_dp = 80  # Smaller minimum width
 
     def build(self):
         if platform not in ("android", "ios"):
@@ -54,7 +127,7 @@ class CraftingGameApp(App):
         Window.clearcolor = (0.06, 0.06, 0.07, 1)
 
         self.title = "Infinite alchemy"
-        root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))  # Reduced spacing
 
         # storage path
         user_dir = Path(self.user_data_dir)
@@ -62,19 +135,19 @@ class CraftingGameApp(App):
         self.GAME_FILE = str(user_dir / "game_data.json")
         self.load_game()
 
-        title = Label(text="Infinite alchemy", font_size=sp(24), bold=True,
-                      color=TEXT, size_hint_y=None, height=dp(34))
+        title = Label(text="Infinite alchemy", font_size=sp(22), bold=True,  # Smaller title
+                      color=TEXT, size_hint_y=None, height=dp(30))  # Smaller height
         root.add_widget(title)
 
         self.status_label = Label(text='Select 2 elements to combine',
-                                  font_size=sp(14), color=TEXT_DIM,
-                                  size_hint_y=None, height=dp(22), font_name=FONT_PATH)
+                                  font_size=sp(12), color=TEXT_DIM,  # Smaller font
+                                  size_hint_y=None, height=dp(18), font_name=FONT_PATH)  # Smaller height
         root.add_widget(self.status_label)
 
-        chip_row = BoxLayout(orientation="horizontal", spacing=dp(8),
-                             size_hint_y=None, height=dp(60))  # Increased height for auto-sizing
-        self.selected_label1 = self._pill("[color=#969696] Select first element")
-        self.selected_label2 = self._pill("[color=#969696] Select second element")
+        chip_row = BoxLayout(orientation="horizontal", spacing=dp(6),  # Reduced spacing
+                             size_hint_y=None, height=dp(45))  # Smaller height
+        self.selected_label1 = self._pill("[color=#969696]Select first element")
+        self.selected_label2 = self._pill("[color=#969696]Select second element")
         self.selected_label1.markup = True
         self.selected_label2.markup = True
         chip_row.add_widget(self.selected_label1)
@@ -82,14 +155,13 @@ class CraftingGameApp(App):
         root.add_widget(chip_row)
 
         scroll = ScrollView(size_hint=(1, 1), bar_width=dp(4))
-        self.inventory_grid = GridLayout(cols=2, spacing=dp(8),
-                                         padding=(0, dp(4)), size_hint_y=None)
-        self.inventory_grid.bind(minimum_height=self.inventory_grid.setter('height'))
+        self.inventory_grid = FlexGridLayout(size_hint_y=None)
+        self.inventory_grid.bind(height=self.inventory_grid.setter('height'))
         scroll.add_widget(self.inventory_grid)
         root.add_widget(scroll)
 
-        actions = BoxLayout(orientation="horizontal", spacing=dp(8),
-                            size_hint_y=None, height=dp(50))
+        actions = BoxLayout(orientation="horizontal", spacing=dp(6),  # Reduced spacing
+                            size_hint_y=None, height=dp(40))  # Smaller height
         self.combine_button = self._button("Combine", PRIMARY_ACCENT, disabled=True)
         self.combine_button.bind(on_press=self.combine_elements)
         clear_button = self._button("Clear", SURFACE_LIGHT)
@@ -98,13 +170,12 @@ class CraftingGameApp(App):
         actions.add_widget(clear_button)
         root.add_widget(actions)
 
-        self.result_label = Label(text="", font_size=sp(15), color=TEXT,
-                                  size_hint_y=None, height=dp(60), halign='center',  # Increased height
-                                  text_size=(None, None))  # Allow auto-sizing
+        self.result_label = Label(text="", font_size=sp(13), color=TEXT,  # Smaller font
+                                  size_hint_y=None, height=dp(45), halign='center',  # Smaller height
+                                  text_size=(None, None))
         root.add_widget(self.result_label)
 
         self.update_inventory_display()
-        Window.bind(size=lambda *_: self._reflow_columns())
 
         # If httpx failed to import, show why (won't crash)
         if HTTPX_IMPORT_ERR:
@@ -117,101 +188,88 @@ class CraftingGameApp(App):
         btn = Button(text=txt, disabled=True,
                      background_normal="", background_down="",
                      background_color=SURFACE_LIGHT,
-                     color=TEXT, font_size=sp(15),
+                     color=TEXT, font_size=sp(13),  # Smaller font
                      halign='center', valign='middle',
-                     size_hint_y=None)  # Allow height to be set dynamically
-        btn.bind(size=lambda b, _: self._auto_size_button(b))
-        btn.bind(text=lambda b, _: self._auto_size_button(b))
+                     size_hint_y=None, height=dp(40))  # Fixed smaller height
+        btn.text_size = (btn.width - dp(8), None)  # Less padding
+        btn.bind(width=lambda btn, width: setattr(btn, 'text_size', (width - dp(8), None)))
         return btn
 
     def _button(self, txt, bg, disabled=False):
         btn = Button(text=txt, background_normal="", background_down="",
-                     background_color=bg, color=TEXT, font_size=sp(16),
-                     size_hint_y=None, height=dp(50),
+                     background_color=bg, color=TEXT, font_size=sp(14),  # Smaller font
+                     size_hint_y=None, height=dp(40),  # Smaller height
                      halign='center', valign='middle', disabled=disabled)
-        btn.bind(size=lambda b, _: self._auto_size_button(b))
-        btn.bind(text=lambda b, _: self._auto_size_button(b))
         return btn
 
     def _chip(self, element):
         # Create a container for the element button and favorite star
-        container = BoxLayout(orientation='vertical', size_hint_y=None)
+        container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))  # Reduced spacing
         
-        # Main element button (auto-sizing height)
+        # Main element button with auto-sizing
         btn = Button(text=self._pretty(element), background_normal="", background_down="",
-                     background_color=SURFACE_LIGHT, color=TEXT, font_size=sp(16),
+                     background_color=SURFACE_LIGHT, color=TEXT, font_size=sp(12),  # Smaller font
                      size_hint_y=None, halign='center', valign='middle')
-        btn.bind(size=lambda b, _: self._auto_size_button(b))
-        btn.bind(text=lambda b, _: self._auto_size_button(b))
+        
+        # Auto-size the button based on content
+        self._auto_size_button(btn)
+        btn.bind(width=lambda b, w: self._auto_size_button(b))
         btn.bind(on_press=partial(self.select_element, element))
         
-        # Favorite star button
+        # Favorite star button - smaller
         is_favorite = element.lower() in self.favorites
         star_text = "★" if is_favorite else "☆"
         star_color = FAVORITE_COLOR if is_favorite else TEXT_DIM
         
         star_btn = Button(text=star_text, background_normal="", background_down="",
-                         background_color=(0, 0, 0, 0), color=star_color, font_size=sp(20),
-                         size_hint_y=None, height=dp(30), halign='center', valign='middle', font_name=FONT_PATH)
+                         background_color=(0, 0, 0, 0), color=star_color, font_size=sp(14),  # Smaller font
+                         size_hint_y=None, height=dp(20), halign='center', valign='middle', font_name=FONT_PATH)  # Smaller height
         star_btn.bind(on_press=partial(self.toggle_favorite, element))
         
         container.add_widget(btn)
         container.add_widget(star_btn)
         
         # Set container height to sum of its children
-        container.bind(children=self._update_container_height)
-        self._update_container_height(container)
+        container.height = btn.height + star_btn.height + dp(2)  # Include spacing
         
-        return container, btn  # Return both for reference
-
-    def _update_container_height(self, container, *args):
-        """Update container height based on children heights"""
-        total_height = sum(child.height for child in container.children)
-        container.height = total_height
+        return container, btn
 
     def _auto_size_button(self, widget):
-        """Auto-size button based on text content"""
+        """Auto-size button based on text content - more compact"""
         if not widget.text:
-            widget.height = dp(40)  # Minimum height
-            widget.text_size = (widget.width - dp(16), None)
+            widget.height = dp(32)  # Smaller minimum height
+            widget.text_size = (widget.width - dp(8), None)  # Less padding
             return
         
         # Set text_size to constrain width but allow height to grow
-        widget.text_size = (widget.width - dp(16), None)
+        widget.text_size = (widget.width - dp(8), None)
         
-        # Calculate required height based on text
+        # Calculate required height based on text - more compact
         lines = widget.text.count('\n') + 1
-        # Account for markup tags in line counting
         if hasattr(widget, 'markup') and widget.markup:
-            # Remove markup tags for more accurate line counting
             import re
             clean_text = re.sub(r'\[.*?\]', '', widget.text)
             lines = clean_text.count('\n') + 1
         
-        # Calculate height: base height + extra height per line
-        base_height = dp(40)
-        line_height = sp(widget.font_size) * 1.2  # Line height is usually ~120% of font size
-        calculated_height = max(base_height, line_height * lines + dp(16))  # Add padding
+        # Smaller, more compact sizing
+        base_height = dp(32)  # Smaller base
+        line_height = sp(widget.font_size) * 1.1  # Tighter line spacing
+        calculated_height = max(base_height, line_height * lines + dp(8))  # Less padding
         
         widget.height = calculated_height
 
     def _pretty(self, name: str) -> str:
-        # More aggressive text wrapping for better button sizing
-        if len(name) > 15:
+        # More aggressive text wrapping for smaller buttons
+        if len(name) > 12:  # Wrap earlier
             if " " in name:
-                # Wrap at spaces for multi-word elements
                 words = name.split()
                 if len(words) > 1:
                     mid = len(words) // 2
                     name = " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
             else:
-                # Wrap long single words
-                name = "\n".join(textwrap.wrap(name, 10))
+                # Wrap long single words earlier
+                name = "\n".join(textwrap.wrap(name, 8))  # Smaller wrap width
         return name.title()
-
-    def _reflow_columns(self):
-        cols = max(2, int(Window.width / dp(self.min_chip_width_dp)))
-        self.inventory_grid.cols = cols
 
     # ---- Favorites system
     def toggle_favorite(self, element, star_button):
@@ -242,7 +300,6 @@ class CraftingGameApp(App):
 
     # ---- Inventory UI
     def update_inventory_display(self):
-        self._reflow_columns()
         self.inventory_grid.clear_widgets()
         self.element_buttons.clear()
         
@@ -261,9 +318,9 @@ class CraftingGameApp(App):
             self.selected_label1.markup = True
             self.selected_label2.markup = True
             if len(self.selected_elements) == 1:
-                self.selected_label1.text = f"[color=#969696] [b]{self._pretty(element)}[/b]"
+                self.selected_label1.text = f"[color=#969696][b]{self._pretty(element)}[/b]"
             elif len(self.selected_elements) == 2:
-                self.selected_label2.text = f"[color=#969696] [b]{self._pretty(element)}[/b]"
+                self.selected_label2.text = f"[color=#969696][b]{self._pretty(element)}[/b]"
                 self.combine_button.disabled = False
         self.update_status()
 
@@ -350,11 +407,11 @@ class CraftingGameApp(App):
             self.update_inventory_display()
             self.result_label.markup = True
             if discovery:
-                self.result_label.text = f"[color=#FFD700]New Discovery\n [b]{pretty}[/b]"
+                self.result_label.text = f"[color=#FFD700]New Discovery\n[b]{pretty}[/b]"
             elif new:
-                self.result_label.text = f"[color=#6632a8]New Recipe\n {self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
+                self.result_label.text = f"[color=#6632a8]New Recipe\n{self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
             else:
-                self.result_label.text = f"[color=#802c11]Already known\n {self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
+                self.result_label.text = f"[color=#802c11]Already known\n{self._pretty(a)} + {self._pretty(b)} = [b]{pretty}[/b]"
         else:
             self.result_label.markup = False
             self.result_label.text = f"Combination failed: {error or 'Unknown error'}"
@@ -370,7 +427,7 @@ class CraftingGameApp(App):
         data = {
             "recipes": recipes_dict, 
             "inventory": sorted(list(self.inventory)),
-            "favorites": sorted(list(self.favorites))  # Save favorites
+            "favorites": sorted(list(self.favorites))
         }
         with open(self.GAME_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
@@ -378,7 +435,7 @@ class CraftingGameApp(App):
     def load_game(self):
         # Load default starting inventory and recipes
         self.inventory = {"fire", "water", "air", "earth"}
-        self.favorites = set()  # Initialize empty favorites
+        self.favorites = set()
         
         # Default recipes
         self.recipes = {
