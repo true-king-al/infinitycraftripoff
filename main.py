@@ -72,7 +72,7 @@ class CraftingGameApp(App):
         root.add_widget(self.status_label)
 
         chip_row = BoxLayout(orientation="horizontal", spacing=dp(8),
-                             size_hint_y=None, height=dp(40))
+                             size_hint_y=None, height=dp(60))  # Increased height for auto-sizing
         self.selected_label1 = self._pill("[color=#969696] Select first element")
         self.selected_label2 = self._pill("[color=#969696] Select second element")
         self.selected_label1.markup = True
@@ -99,7 +99,8 @@ class CraftingGameApp(App):
         root.add_widget(actions)
 
         self.result_label = Label(text="", font_size=sp(15), color=TEXT,
-                                  size_hint_y=None, height=dp(40), halign='center')
+                                  size_hint_y=None, height=dp(60), halign='center',  # Increased height
+                                  text_size=(None, None))  # Allow auto-sizing
         root.add_widget(self.result_label)
 
         self.update_inventory_display()
@@ -117,8 +118,10 @@ class CraftingGameApp(App):
                      background_normal="", background_down="",
                      background_color=SURFACE_LIGHT,
                      color=TEXT, font_size=sp(15),
-                     halign='center', valign='middle')
-        btn.bind(size=lambda b, _: self._wrap_text(b))
+                     halign='center', valign='middle',
+                     size_hint_y=None)  # Allow height to be set dynamically
+        btn.bind(size=lambda b, _: self._auto_size_button(b))
+        btn.bind(text=lambda b, _: self._auto_size_button(b))
         return btn
 
     def _button(self, txt, bg, disabled=False):
@@ -126,18 +129,20 @@ class CraftingGameApp(App):
                      background_color=bg, color=TEXT, font_size=sp(16),
                      size_hint_y=None, height=dp(50),
                      halign='center', valign='middle', disabled=disabled)
-        btn.bind(size=lambda b, _: self._wrap_text(b))
+        btn.bind(size=lambda b, _: self._auto_size_button(b))
+        btn.bind(text=lambda b, _: self._auto_size_button(b))
         return btn
 
     def _chip(self, element):
         # Create a container for the element button and favorite star
-        container = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(52))
+        container = BoxLayout(orientation='vertical', size_hint_y=None)
         
-        # Main element button (takes most of the space)
+        # Main element button (auto-sizing height)
         btn = Button(text=self._pretty(element), background_normal="", background_down="",
                      background_color=SURFACE_LIGHT, color=TEXT, font_size=sp(16),
-                     size_hint_y=0.75, halign='center', valign='middle')
-        btn.bind(size=lambda b, _: self._wrap_text(b))
+                     size_hint_y=None, halign='center', valign='middle')
+        btn.bind(size=lambda b, _: self._auto_size_button(b))
+        btn.bind(text=lambda b, _: self._auto_size_button(b))
         btn.bind(on_press=partial(self.select_element, element))
         
         # Favorite star button
@@ -147,20 +152,61 @@ class CraftingGameApp(App):
         
         star_btn = Button(text=star_text, background_normal="", background_down="",
                          background_color=(0, 0, 0, 0), color=star_color, font_size=sp(20),
-                         size_hint_y=0.25, halign='center', valign='middle', font_name=FONT_PATH)
+                         size_hint_y=None, height=dp(30), halign='center', valign='middle', font_name=FONT_PATH)
         star_btn.bind(on_press=partial(self.toggle_favorite, element))
         
         container.add_widget(btn)
         container.add_widget(star_btn)
         
+        # Set container height to sum of its children
+        container.bind(children=self._update_container_height)
+        self._update_container_height(container)
+        
         return container, btn  # Return both for reference
 
-    def _wrap_text(self, widget):
+    def _update_container_height(self, container, *args):
+        """Update container height based on children heights"""
+        total_height = sum(child.height for child in container.children)
+        container.height = total_height
+
+    def _auto_size_button(self, widget):
+        """Auto-size button based on text content"""
+        if not widget.text:
+            widget.height = dp(40)  # Minimum height
+            widget.text_size = (widget.width - dp(16), None)
+            return
+        
+        # Set text_size to constrain width but allow height to grow
         widget.text_size = (widget.width - dp(16), None)
+        
+        # Calculate required height based on text
+        lines = widget.text.count('\n') + 1
+        # Account for markup tags in line counting
+        if hasattr(widget, 'markup') and widget.markup:
+            # Remove markup tags for more accurate line counting
+            import re
+            clean_text = re.sub(r'\[.*?\]', '', widget.text)
+            lines = clean_text.count('\n') + 1
+        
+        # Calculate height: base height + extra height per line
+        base_height = dp(40)
+        line_height = sp(widget.font_size) * 1.2  # Line height is usually ~120% of font size
+        calculated_height = max(base_height, line_height * lines + dp(16))  # Add padding
+        
+        widget.height = calculated_height
 
     def _pretty(self, name: str) -> str:
-        if len(name) > 18 and " " not in name:
-            name = "\n".join(textwrap.wrap(name, 12))
+        # More aggressive text wrapping for better button sizing
+        if len(name) > 15:
+            if " " in name:
+                # Wrap at spaces for multi-word elements
+                words = name.split()
+                if len(words) > 1:
+                    mid = len(words) // 2
+                    name = " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
+            else:
+                # Wrap long single words
+                name = "\n".join(textwrap.wrap(name, 10))
         return name.title()
 
     def _reflow_columns(self):
