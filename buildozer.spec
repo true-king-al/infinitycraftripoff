@@ -18,7 +18,7 @@ icon.filename = %(source.dir)s/assets/icon.png
 presplash.filename = %(source.dir)s/assets/splash.png
 
 # App store optimization
-android.meta_data = com.google.android.gms.ads.APPLICATION_ID:ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx
+#android.meta_data = com.google.android.gms.ads.APPLICATION_ID:ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx
 
 requirements = python3,kivy==2.3.0,openssl,libffi,openai==1.51.0,httpx,httpcore,h11,certifi,urllib3,idna,charset-normalizer
 
