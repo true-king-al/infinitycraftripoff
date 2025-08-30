@@ -1,7 +1,7 @@
 [app]
 title = Infinite Alchemy
 package.name = infinitealchemy
-package.domain = com.yourcompany
+package.domain = com.loganlarrabrr
 source.dir = .
 main = main.py
 version = 1.0.0
@@ -37,24 +37,12 @@ fullscreen = 0
 # Auto-accept license prompts
 android.accept_sdk_license = True
 
-# App signing (for release builds)
-android.debug = 0
-
-# Optimize APK
-android.add_aars =     
-
-# App store metadata
-android.gradle_dependencies =     
 
 # Launch screen background color
 android.presplash_color = #0A0A0B
 
 # App bundle settings (for Play Store)
 android.release_artifact = aab
-
-# Proguard (code obfuscation)
-android.add_gradle_buildscript =     
-android.gradle_build_dir =     
 
 [buildozer]
 log_level = 2
