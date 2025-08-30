@@ -4,9 +4,9 @@ package.name = infinitealchemy
 package.domain = com.loganlarrabee
 source.dir = .
 main = main.py
-version = 1.3.0
+version = 1.3.1
 #version.regex = __version__ = ['"]([^'"]*)['"]
-version.filename = %(source.dir)s/main.py
+#version.filename = %(source.dir)s/main.py
 
 # App description and metadata
 description = Create unlimited combinations in this addictive alchemy crafting game! Start with basic elements and discover hundreds of new items.
