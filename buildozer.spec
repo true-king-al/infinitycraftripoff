@@ -15,7 +15,7 @@ copyright = logan inc
 
 # Icon and splash screen
 icon.filename = %(source.dir)s/assets/Icon.png
-presplash.filename = %(source.dir)s/assets/Splash.png
+presplash.filename = %(source.dir)s/assets/splash.png
 
 # App store optimization
 #android.meta_data = com.google.android.gms.ads.APPLICATION_ID:ca-app-pub-xxxxxxxxxxxxxxxx~xxxxxxxxxx
