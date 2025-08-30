@@ -1,11 +1,11 @@
 [app]
 title = Infinite Alchemy
 package.name = infinitealchemy
-package.domain = com.loganlarrabrr
+package.domain = com.loganlarrabee
 source.dir = .
 main = main.py
-version = 1.0.0
-version.regex = __version__ = ['"]([^'"]*)['"]
+version = 1.3.0
+#version.regex = __version__ = ['"]([^'"]*)['"]
 version.filename = %(source.dir)s/main.py
 
 # App description and metadata
